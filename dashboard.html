@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Library Management System</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            Library Admin
+        </div>
+        <ul class="nav-links">
+            <li><a href="dashboard.html" class="active">Dashboard</a></li>
+            <li><a href="books.html">Books</a></li>
+            <li><a href="students.html">Students</a></li>
+            <li><a href="issue.html">Issue Book</a></li>
+            <li><a href="return.html">Return Book</a></li>
+        </ul>
+        <button class="logout-btn" onclick="logout()">Logout</button>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="header-top">
+            <h1 class="page-title">Dashboard Overview</h1>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">📚</div>
+                <div class="stat-info">
+                    <h3>Total Books</h3>
+                    <div class="stat-value" id="stat-books">0</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🎓</div>
+                <div class="stat-info">
+                    <h3>Total Students</h3>
+                    <div class="stat-value" id="stat-students">0</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🔖</div>
+                <div class="stat-info">
+                    <h3>Books Issued</h3>
+                    <div class="stat-value" id="stat-issued">0</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex" style="flex-wrap: wrap; gap: 20px;">
+            <div class="recent-transactions mt-4" style="flex: 1; min-width: 300px;">
+                <h2 class="mb-3" style="font-size: 1.2rem;">Recent Issues (Last 10)</h2>
+                <div class="table-container">
+                    <table id="issuedTable">
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>Book</th>
+                                <th>Issue Date</th>
+                                <th>Due Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Data injected via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="recent-transactions mt-4" style="flex: 1; min-width: 300px;">
+                <h2 class="mb-3" style="font-size: 1.2rem;">Recent Returns (Last 10)</h2>
+                <div class="table-container">
+                    <table id="returnedTable">
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>Book</th>
+                                <th>Return Date</th>
+                                <th>Fine Collected</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const stats = await Api.get('/dashboard/stats');
+                document.getElementById('stat-books').innerText = stats.totalBooks;
+                document.getElementById('stat-students').innerText = stats.totalStudents;
+                document.getElementById('stat-issued').innerText = stats.totalIssued;
+
+                const transactions = await Api.get('/transactions');
+                
+                const issued = transactions.filter(t => t.status === 'ISSUED').slice(0, 10);
+                const tbodyIssued = document.querySelector('#issuedTable tbody');
+                tbodyIssued.innerHTML = issued.length > 0 ? issued.map(trx => `
+                    <tr>
+                        <td>${trx.student_name}</td>
+                        <td>${trx.book_title}</td>
+                        <td>${trx.issue_date.split('T')[0]}</td>
+                        <td>${trx.due_date.split('T')[0]}</td>
+                    </tr>
+                `).join('') : '<tr><td colspan="4" class="text-center">No recent issues</td></tr>';
+
+                const returned = transactions.filter(t => t.status === 'RETURNED');
+                returned.sort((a, b) => new Date(b.return_date) - new Date(a.return_date));
+                const topReturned = returned.slice(0, 10);
+                
+                const tbodyReturned = document.querySelector('#returnedTable tbody');
+                tbodyReturned.innerHTML = topReturned.length > 0 ? topReturned.map(trx => `
+                    <tr>
+                        <td>${trx.student_name}</td>
+                        <td>${trx.book_title}</td>
+                        <td>${trx.return_date.split('T')[0]}</td>
+                        <td style="color: ${trx.fine_amount > 0 ? 'var(--danger)' : 'var(--success)'}; font-weight: 500;">₹${trx.fine_amount}</td>
+                    </tr>
+                `).join('') : '<tr><td colspan="4" class="text-center">No recent returns</td></tr>';
+            } catch (error) {
+                showToast('Error loading dashboard data', 'error');
+            }
+        });
+    </script>
+</body>
+</html>

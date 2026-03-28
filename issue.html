@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Issue Book - Library Management</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <aside class="sidebar">
+        <div class="sidebar-header">Library Admin</div>
+        <ul class="nav-links">
+            <li><a href="dashboard.html">Dashboard</a></li>
+            <li><a href="books.html">Books</a></li>
+            <li><a href="students.html">Students</a></li>
+            <li><a href="issue.html" class="active">Issue Book</a></li>
+            <li><a href="return.html">Return Book</a></li>
+        </ul>
+        <button class="logout-btn" onclick="logout()">Logout</button>
+    </aside>
+
+    <main class="main-content">
+        <div class="header-top">
+            <h1 class="page-title">Issue Book</h1>
+        </div>
+
+        <form id="issueForm" class="card-form" style="margin:0; max-width:800px;">
+            <div class="form-group">
+                <label>Select Student</label>
+                <input type="text" id="search_student" class="form-control mb-2" placeholder="Search student by Name, ID, or Email..." oninput="filterStudents()">
+                <select id="i_student" class="form-control" required>
+                    <option value="">-- Loading Students --</option>
+                </select>
+            </div>
+            <div class="form-group mb-2">
+                <label>Select Book</label>
+                <input type="text" id="search_book" class="form-control mb-2" placeholder="Search book by title or author..." oninput="filterBooks()">
+                <select id="i_book" class="form-control" required>
+                    <option value="">-- Loading Books --</option>
+                </select>
+                <small id="bookAvailability" style="color: var(--text-muted); margin-top:5px; display:inline-block;"></small>
+            </div>
+            <div class="form-group mb-4">
+                <label>Due Date (Max 1 Week)</label>
+                <input type="date" id="i_due_date" class="form-control" required>
+            </div>
+            <button type="submit" id="issueBtn" class="btn btn-primary">Issue Book</button>
+        </form>
+    </main>
+
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+    <script>
+        let allStudents = [];
+        let allBooks = [];
+        let availableBooksMap = {};
+
+        async function loadData() {
+            try {
+                const [students, books] = await Promise.all([
+                    Api.get('/students'),
+                    Api.get('/books')
+                ]);
+                
+                allStudents = students;
+                allBooks = books;
+
+                renderStudents(students);
+                renderBooks(books);
+
+                // Set Due Date Boundaries
+                const today = new Date();
+                const maxDate = new Date();
+                maxDate.setDate(today.getDate() + 7);
+
+                const dateInput = document.getElementById('i_due_date');
+                dateInput.min = today.toISOString().split('T')[0];
+                dateInput.max = maxDate.toISOString().split('T')[0];
+                dateInput.value = maxDate.toISOString().split('T')[0]; // Default to 7 days
+
+                document.getElementById('i_book').addEventListener('change', (e) => {
+                    const bookId = e.target.value;
+                    const availMsg = document.getElementById('bookAvailability');
+                    const btn = document.getElementById('issueBtn');
+                    if(bookId) {
+                        const copies = availableBooksMap[bookId];
+                        if(copies <= 0) {
+                            availMsg.innerHTML = `<span style="color: var(--danger)">This book is not available right now.</span>`;
+                            btn.disabled = true;
+                            btn.style.opacity = '0.5';
+                            btn.style.cursor = 'not-allowed';
+                        } else {
+                            availMsg.innerHTML = `<span style="color: var(--success)">Available Copies: ${copies}</span>`;
+                            btn.disabled = false;
+                            btn.style.opacity = '1';
+                            btn.style.cursor = 'pointer';
+                        }
+                    } else {
+                        availMsg.innerHTML = '';
+                        btn.disabled = false;
+                    }
+                });
+            } catch (err) {
+                showToast('Failed to load data for issuing', 'error');
+            }
+        }
+
+        function renderStudents(list) {
+            const studentSelect = document.getElementById('i_student');
+            studentSelect.innerHTML = '<option value="">-- Select a Student --</option>' + 
+                list.map(s => `<option value="${s.id}">[${s.student_id}] ${s.name} (${s.email})</option>`).join('');
+        }
+
+        function renderBooks(list) {
+            const bookSelect = document.getElementById('i_book');
+            bookSelect.innerHTML = '<option value="">-- Select a Book --</option>' + 
+                list.map(b => {
+                    availableBooksMap[b.id] = b.available_copies;
+                    return `<option value="${b.id}">${b.title} - ${b.author} (Qty: ${b.available_copies})</option>`;
+                }).join('');
+        }
+
+        function filterStudents() {
+            const query = document.getElementById('search_student').value.toLowerCase();
+            const filtered = allStudents.filter(s => 
+                s.name.toLowerCase().includes(query) || 
+                (s.student_id && s.student_id.toLowerCase().includes(query)) ||
+                s.email.toLowerCase().includes(query)
+            );
+            renderStudents(filtered);
+            document.getElementById('i_student').value = ""; // Reset selected
+        }
+
+        function filterBooks() {
+            const query = document.getElementById('search_book').value.toLowerCase();
+            const filtered = allBooks.filter(b => 
+                b.title.toLowerCase().includes(query) || b.author.toLowerCase().includes(query)
+            );
+            renderBooks(filtered);
+            document.getElementById('i_book').value = ""; // Reset selected
+            document.getElementById('bookAvailability').innerHTML = ''; // Reset message
+        }
+
+        document.getElementById('issueForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const studentId = document.getElementById('i_student').value;
+            const bookId = document.getElementById('i_book').value;
+            const dueDate = document.getElementById('i_due_date').value;
+
+            try {
+                await Api.post('/transactions/issue', { student_id: studentId, book_id: bookId, due_date: dueDate });
+                showToast('Book issued successfully!');
+                document.getElementById('issueForm').reset();
+                document.getElementById('bookAvailability').innerHTML = '';
+                // this is Reload data to update availability count
+                loadData();
+            } catch (error) {
+                showToast(error.message, 'error');
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', loadData);
+    </script>
+</body>
+</html>

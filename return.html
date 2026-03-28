@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Return Book - Library Management</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <aside class="sidebar">
+        <div class="sidebar-header">Library Admin</div>
+        <ul class="nav-links">
+            <li><a href="dashboard.html">Dashboard</a></li>
+            <li><a href="books.html">Books</a></li>
+            <li><a href="students.html">Students</a></li>
+            <li><a href="issue.html">Issue Book</a></li>
+            <li><a href="return.html" class="active">Return Book</a></li>
+        </ul>
+        <button class="logout-btn" onclick="logout()">Logout</button>
+    </aside>
+
+    <main class="main-content">
+        <div class="header-top">
+            <h1 class="page-title">Return Book</h1>
+        </div>
+
+        <div class="table-container mt-4">
+            <table id="issuedTable">
+                <thead>
+                    <tr>
+                        <th>Transaction ID</th>
+                        <th>Student</th>
+                        <th>Book</th>
+                        <th>Issue Date</th>
+                        <th>Due Date</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    
+
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+    <script>
+        async function loadIssuedBooks() {
+            try {
+                const transactions = await Api.get('/transactions');
+                // Filter only ISSUED
+                const activeIssues = transactions.filter(t => t.status === 'ISSUED');
+                const tbody = document.querySelector('#issuedTable tbody');
+                
+                if (activeIssues.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center">No active issued books found.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = activeIssues.map(t => {
+                    const due = new Date(t.due_date);
+                    const today = new Date();
+                    let fineWarning = '';
+                    if(today > due) {
+                        const days = Math.ceil((today - due) / (1000 * 3600 * 24));
+                        fineWarning = `<br><small style="color:var(--danger)">Overdue by ${days} days (₹${days * 5} fine expected)</small>`;
+                    }
+
+                    return `
+                    <tr>
+                        <td>${t.id}</td>
+                        <td>${t.student_name}</td>
+                        <td>${t.book_title}</td>
+                        <td>${t.issue_date.split('T')[0]}</td>
+                        <td>${t.due_date.split('T')[0]} ${fineWarning}</td>
+                        <td>
+                            <button class="btn btn-primary" style="padding: 5px 10px; font-size: 0.85rem;" onclick="returnBook(${t.id})">Return Book</button>
+                        </td>
+                    </tr>
+                `}).join('');
+            } catch (err) {
+                showToast('Failed to load transactions', 'error');
+            }
+        }
+
+        async function returnBook(issueId) {
+            if(!confirm('Process this return?')) return;
+            try {
+                const res = await Api.post('/transactions/return', { issue_id: issueId });
+                if(res.fineAmount > 0) {
+                    showToast(`Book returned successfully! A fine of ₹${res.fineAmount} was collected.`, 'warning');
+                } else {
+                    showToast('Book returned successfully! No fine.');
+                }
+                loadIssuedBooks();
+            } catch (error) {
+                showToast(error.message, 'error');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', loadIssuedBooks);
+    </script>
+</body>
+</html>
